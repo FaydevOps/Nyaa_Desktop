@@ -153,8 +153,7 @@ brew install transmission-cli
 python3 nyadowloader.py
 
 ```
-## 📸 Screenshots
-<img width="1895" height="1033" alt="image" src="https://github.com/user-attachments/assets/0a71234a-e0f3-4fb7-b2e6-13629f432c28" />
+
 
 ## ⚠️ Disclaimer
 
