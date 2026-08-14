@@ -33,7 +33,7 @@
 
 ## 📋 Acerca de
 
-**Nyaa Desktop Pro** es un cliente de escritorio completo, moderno y de alto rendimiento para [Nyaa.si](https://nyaa.si), desarrollado íntegramente en Python. Permite explorar la plataforma en tiempo real, filtrar torrents por idioma y categorías, ver descripciones completas traducidas automáticamente a más de 15 idiomas, integrar el catálogo con AniList, gestionar descargas mediante enlaces Magnet / `transmission-cli` e incluso iniciar sesión y publicar tus propios torrents sin salir de la app.
+**Nyaa Desktop Pro** es un cliente de escritorio completo, moderno y de alto rendimiento para [Nyaa.si](https://nyaa.si), desarrollado íntegramente en Python. Permite explorar la plataforma en tiempo real, filtrar torrents por idioma y categorías, ver descripciones completas traducidas automáticamente a más de 15 idiomas, integrar el catálogo con AniList, gestionar descargas mediante enlaces Magnet / `transmission-cli` `Aira2` e incluso iniciar sesión y publicar tus propios torrents sin salir de la app.
 
 ---
 
