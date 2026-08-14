@@ -158,7 +158,7 @@ Esta aplicación es una interfaz de cliente de código abierto para interactuar 
 
 ### 📜 License
 
-**GPL-3.0 License**
+**MIT License**
 
 ---
 
