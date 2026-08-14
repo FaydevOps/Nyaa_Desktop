@@ -58,7 +58,7 @@
 
 - **🧲 Integración BitTorrent & Detección de Idioma**  
   Detección automática del idioma del torrent (Español Latino, Castellano, Inglés, Raw, etc.) e indicadores visuales de calidad (4K, 1080p, 720p, FLAC).  
-  Integración nativa con `transmission-cli` para descargas directas o apertura automática de enlaces magnet en tu cliente de escritorio habitual (qBittorrent, Transmission GTK, Deluge, etc.).
+  Integración nativa con `transmission-cli` `Aira2` para descargas directas o apertura automática de enlaces magnet en tu cliente de escritorio habitual (qBittorrent, Transmission GTK, Deluge, etc.).
 
 - **⭐ Favoritos y Personalización**  
   Guarda torrents en marcadores locales para descargarlos o seguirlos más tarde.  
