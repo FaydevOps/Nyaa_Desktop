@@ -90,7 +90,7 @@ Sigue estos pasos según tu sistema operativo para clonar el repositorio y ejecu
 ```bash
 
 # 1. Clona el repositorio e ingresa a la carpeta
-git clone [https://github.com/tu-usuario/nyaa-desktop-pro.git](https://github.com/tu-usuario/nyaa-desktop-pro.git)
+git clone https://github.com/FaydevOps/Nyaa_Desktop
 cd nyaa-desktop-pro
 
 # 2. Crea y activa un entorno virtual (Recomendado en Python 3.12+)
@@ -105,8 +105,13 @@ pip install requests beautifulsoup4 pillow customtkinter
 
 # 4. (Opcional) Instala transmission-cli para descargas automáticas
 # Ubuntu / Debian: sudo apt install transmission-cli
+                   sudo apt install aria2
+
 # Arch Linux:      sudo pacman -S transmission-cli
+                   sudo pacman -S aria2
+
 # Fedora:          sudo dnf install transmission-cli
+                   sudo dnf install aria2
 
 # 5. Ejecuta la aplicación
 python3 nyadowloader.py
@@ -118,7 +123,7 @@ python3 nyadowloader.py
 
 ```cmd
 # 1. Abre PowerShell o CMD y clona el repositorio
-git clone [https://github.com/tu-usuario/nyaa-desktop-pro.git](https://github.com/tu-usuario/nyaa-desktop-pro.git)
+git clone https://github.com/FaydevOps/Nyaa_Desktop
 cd nyaa-desktop-pro
 
 # 2. Crea y activa el entorno virtual
@@ -129,14 +134,14 @@ python -m venv venv
 pip install requests beautifulsoup4 pillow customtkinter
 
 # 4. Ejecuta la aplicación
-python nyadowloader.py
+python nyaadesk.py
 ```
 
 ### 🍎 macOS
 
 ```bash
 # 1. Abre la Terminal y clona el proyecto
-git clone [https://github.com/tu-usuario/nyaa-desktop-pro.git](https://github.com/tu-usuario/nyaa-desktop-pro.git)
+git clone https://github.com/FaydevOps/Nyaa_Desktop
 cd nyaa-desktop-pro
 
 # 2. Crea y activa el entorno virtual
@@ -148,6 +153,7 @@ pip install requests beautifulsoup4 pillow customtkinter
 
 # 4. (Opcional) Instala transmission-cli vía Homebrew
 brew install transmission-cli
+brew install aria2
 
 # 5. Ejecuta la aplicación
 python3 nyadowloader.py
