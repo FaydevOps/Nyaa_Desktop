@@ -22,37 +22,18 @@ import subprocess
 import re
 from datetime import datetime
 
-SISTEMA = platform.system()
-ES_WINDOWS = SISTEMA == "Windows"
-ES_MAC = SISTEMA == "Darwin"
-ES_LINUX = SISTEMA == "Linux"
-
-def verificar_e_importar_dependencias():
-    """Verifica e importa librerías requeridas instalando si es necesario."""
-    deps = {
-        'requests': 'requests',
-        'bs4': 'beautifulsoup4',
-        'PIL': 'pillow',
-        'customtkinter': 'customtkinter'
-    }
-    for mod, pkg in deps.items():
-        try:
-            __import__(mod)
-        except ImportError:
-            print(f"📦 Instalando dependencia requerida: {pkg}...")
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
-            except Exception as e:
-                print(f"❌ Error al instalar {pkg}: {e}")
-
-verificar_e_importar_dependencias()
-
+# Librerías de terceros (deben estar instaladas previamente)
 import requests
 from bs4 import BeautifulSoup
 from PIL import Image, ImageTk
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+
+SISTEMA = platform.system()
+ES_WINDOWS = SISTEMA == "Windows"
+ES_MAC = SISTEMA == "Darwin"
+ES_LINUX = SISTEMA == "Linux"
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -95,8 +76,25 @@ def copiar_al_portapapeles(texto, window):
     window.update()
 
 def detectar_transmission():
+    """Detecta si transmission-cli está disponible en el sistema."""
     try:
-        cmd = ['where', 'transmission-cli'] if ES_WINDOWS else ['which', 'transmission-cli']
+        if ES_WINDOWS:
+            # Buscar transmission-cli.exe en el PATH
+            cmd = ['where', 'transmission-cli.exe']
+        else:
+            cmd = ['which', 'transmission-cli']
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+def detectar_aria2():
+    """Detecta si aria2c está disponible en el sistema."""
+    try:
+        if ES_WINDOWS:
+            cmd = ['where', 'aria2c.exe']
+        else:
+            cmd = ['which', 'aria2c']
         res = subprocess.run(cmd, capture_output=True, text=True)
         return res.returncode == 0
     except Exception:
@@ -274,6 +272,7 @@ class NyaaDesktopApp:
         self.animes_catalogo = []
         self.descargas_activas = []
         self.transmission_disponible = detectar_transmission()
+        self.aria2_disponible = detectar_aria2()
         
         self.crear_interfaz()
         self.comprobar_estado_usuario()
@@ -393,13 +392,17 @@ class NyaaDesktopApp:
         )
         self.btn_nav_downloads.pack(padx=15, pady=5, fill="x")
 
-        # Footer Sidebar con estado de cliente BitTorrent
+        # Footer Sidebar con estado de clientes BitTorrent
         frame_footer = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         frame_footer.pack(side="bottom", fill="x", padx=15, pady=15)
 
-        tb_status = "✅ Transmission OK" if self.transmission_disponible else "⚠️ Cliente Genérico"
+        tb_status = "✅ Transmission OK" if self.transmission_disponible else "⚠️ Transmission no encontrado"
         tb_color = "#10B981" if self.transmission_disponible else "#F59E0B"
         ctk.CTkLabel(frame_footer, text=tb_status, font=("Segoe UI", 11), text_color=tb_color).pack(anchor="w")
+
+        aria_status = "✅ aria2 OK" if self.aria2_disponible else "⚠️ aria2 no encontrado"
+        aria_color = "#10B981" if self.aria2_disponible else "#F59E0B"
+        ctk.CTkLabel(frame_footer, text=aria_status, font=("Segoe UI", 11), text_color=aria_color).pack(anchor="w")
 
         # CONTENEDOR PRINCIPAL
         self.main_content = ctk.CTkFrame(self.root_frame, fg_color="#0F1117")
@@ -1213,40 +1216,169 @@ class NyaaDesktopApp:
         )
         btn_folder.pack(anchor="w")
 
+    # =========================================================
+    # NUEVA LÓGICA DE DESCARGA (soporta .torrent y magnet)
+    # =========================================================
     def descargar_o_abrir_seleccion(self):
-        """Descarga el torrent o ejecuta el Magnet según la preferencia."""
+        """
+        Descarga el contenido del torrent usando Transmission o aria2 si están disponibles.
+        Soporta tanto enlaces a archivos .torrent como enlaces magnet.
+        """
         t = self.obtener_torrent_seleccionado()
         if not t:
             return
 
-        if self.transmission_disponible and t.get('enlace'):
-            self.descargar_con_transmission(t)
-        elif t.get('magnet'):
-            abrir_recurso(t['magnet'])
-            self.lbl_status.configure(text="🧲 Enlace Magnet enviado al cliente BitTorrent del sistema.")
-        elif t.get('enlace'):
-            abrir_recurso(t['enlace'])
+        url = t.get('enlace') or t.get('magnet')
+        if not url:
+            messagebox.showwarning("Sin enlace", "Este torrent no tiene enlace de descarga ni magnet disponible.")
+            return
 
-    def descargar_con_transmission(self, torrent):
-        """Descarga mediante transmission-cli si está presente."""
+        # Si hay un cliente disponible, usar descarga automática
+        if self.transmission_disponible or self.aria2_disponible:
+            self.descargar_con_cliente(t)
+        else:
+            # Si no hay cliente, abrir la URL con el sistema
+            abrir_recurso(url)
+            self.lbl_status.configure(text="📄 Enlace abierto. Usa tu cliente BitTorrent para continuar.")
+            messagebox.showinfo(
+                "Cliente BitTorrent no encontrado",
+                "No se encontró Transmission ni aria2 en tu sistema.\n\n"
+                "Se ha abierto el enlace (magnet o .torrent) en tu navegador.\n"
+                "Descárgalo y ábrelo con tu cliente BitTorrent favorito."
+            )
+
+    def descargar_con_cliente(self, torrent):
+        """
+        Elige el cliente disponible (aria2 preferido por ser más fiable) y lanza la descarga.
+        """
+        url = torrent.get('enlace') or torrent.get('magnet')
+        if not url:
+            return
+
+        nombre = torrent.get('nombre', 'Torrent')
+
+        # Priorizar aria2 porque siempre espera a que termine la descarga
+        if self.aria2_disponible:
+            self.descargar_con_aria2(url, nombre)
+        elif self.transmission_disponible:
+            self.descargar_con_transmission(url, nombre)
+        else:
+            # No debería llegar aquí, pero por si acaso
+            abrir_recurso(url)
+
+    def descargar_con_transmission(self, url, nombre):
+        """
+        Descarga usando transmission-cli con la opción --exit para que espere a que termine.
+        Si url es un enlace http, descarga el archivo .torrent;
+        si es un magnet, lo pasa directamente.
+        """
         def _dl():
             try:
-                # Descargar .torrent temporal
-                r = requests.get(torrent['enlace'], headers=HEADERS, timeout=15)
-                tmp_path = os.path.join(self.dir_descargas, torrent['filename'])
-                with open(tmp_path, 'wb') as file_out:
-                    file_out.write(r.content)
+                if url.startswith('magnet:'):
+                    # Es un magnet, usarlo directamente
+                    cmd = ['transmission-cli', '--exit', '-w', self.dir_descargas, url]
+                    self.window.after(0, lambda: self.lbl_status.configure(
+                        text=f"🧲 Descargando magnet con Transmission: {nombre[:30]}..."
+                    ))
+                else:
+                    # Es un enlace a .torrent, descargar el archivo primero
+                    r = requests.get(url, headers=HEADERS, timeout=15)
+                    nombre_archivo = f"temp_{int(time.time())}.torrent"
+                    tmp_path = os.path.join(self.dir_descargas, nombre_archivo)
+                    with open(tmp_path, 'wb') as f:
+                        f.write(r.content)
+                    cmd = ['transmission-cli', '--exit', '-w', self.dir_descargas, tmp_path]
+                    self.window.after(0, lambda: self.lbl_status.configure(
+                        text=f"⬇️ Descargando con Transmission: {nombre[:30]}..."
+                    ))
 
-                cmd = ['transmission-cli', '-w', self.dir_descargas, tmp_path]
-                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                # Ejecutar y esperar (timeout de 1 hora)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
 
-                self.window.after(0, lambda: self.lbl_status.configure(
-                    text=f"⬇️ Descargando con Transmission: {torrent['nombre'][:35]}..."
+                if result.returncode == 0:
+                    self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
+                else:
+                    error_msg = result.stderr.strip() or "Código de error desconocido."
+                    self.window.after(0, lambda: messagebox.showerror(
+                        "Error en Transmission",
+                        f"Transmission finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
+                    ))
+                    self.window.after(0, lambda: self.lbl_status.configure(
+                        text=f"❌ Falló la descarga de {nombre[:30]}..."
+                    ))
+
+            except subprocess.TimeoutExpired:
+                self.window.after(0, lambda: messagebox.showerror(
+                    "Timeout",
+                    "La descarga ha excedido el tiempo límite (1 hora). Puede que no haya seeds suficientes."
                 ))
+                self.window.after(0, lambda: self.lbl_status.configure(text="⏰ Tiempo de descarga agotado"))
             except Exception as e:
                 self.window.after(0, lambda: messagebox.showerror("Error Transmission", str(e)))
+                self.window.after(0, lambda: self.lbl_status.configure(text="❌ Error en la descarga"))
 
         threading.Thread(target=_dl, daemon=True).start()
+
+    def descargar_con_aria2(self, url, nombre):
+        """
+        Descarga usando aria2c. Acepta magnet o enlace a .torrent.
+        aria2c siempre espera a que termine la descarga.
+        """
+        def _dl():
+            try:
+                if url.startswith('magnet:'):
+                    cmd = ['aria2c', '--seed-time=0', '--dir=' + self.dir_descargas, url]
+                    self.window.after(0, lambda: self.lbl_status.configure(
+                        text=f"🧲 Descargando magnet con aria2: {nombre[:30]}..."
+                    ))
+                else:
+                    r = requests.get(url, headers=HEADERS, timeout=15)
+                    nombre_archivo = f"temp_{int(time.time())}.torrent"
+                    tmp_path = os.path.join(self.dir_descargas, nombre_archivo)
+                    with open(tmp_path, 'wb') as f:
+                        f.write(r.content)
+                    cmd = ['aria2c', '--seed-time=0', '--dir=' + self.dir_descargas, tmp_path]
+                    self.window.after(0, lambda: self.lbl_status.configure(
+                        text=f"⬇️ Descargando con aria2: {nombre[:30]}..."
+                    ))
+
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+
+                if result.returncode == 0:
+                    self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
+                else:
+                    error_msg = result.stderr.strip() or "Código de error desconocido."
+                    self.window.after(0, lambda: messagebox.showerror(
+                        "Error en aria2",
+                        f"aria2c finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
+                    ))
+                    self.window.after(0, lambda: self.lbl_status.configure(
+                        text=f"❌ Falló la descarga de {nombre[:30]}..."
+                    ))
+
+            except subprocess.TimeoutExpired:
+                self.window.after(0, lambda: messagebox.showerror(
+                    "Timeout",
+                    "La descarga ha excedido el tiempo límite (1 hora). Puede que no haya seeds suficientes."
+                ))
+                self.window.after(0, lambda: self.lbl_status.configure(text="⏰ Tiempo de descarga agotado"))
+            except Exception as e:
+                self.window.after(0, lambda: messagebox.showerror("Error aria2", str(e)))
+                self.window.after(0, lambda: self.lbl_status.configure(text="❌ Error en la descarga"))
+
+        threading.Thread(target=_dl, daemon=True).start()
+
+    def mostrar_notificacion_descarga_completa(self, nombre):
+        """
+        Muestra una ventana emergente y actualiza la barra de estado
+        cuando la descarga del contenido ha finalizado con éxito.
+        """
+        self.lbl_status.configure(text=f"✅ Descarga completada: {nombre[:40]}...")
+        messagebox.showinfo(
+            "📥 Descarga finalizada",
+            f"El contenido del torrent '{nombre}' se ha descargado correctamente.\n\n"
+            f"📂 Carpeta: {self.dir_descargas}"
+        )
 
 if __name__ == "__main__":
     try:
