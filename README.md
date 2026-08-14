@@ -66,6 +66,12 @@
 
 ---
 
+### 📸 Vista Previa de la Interfaz (GUI)
+
+<p align="center">
+  <img width="1897" height="1011" alt="image" src="https://github.com/user-attachments/assets/b8caefe6-114d-45a1-8629-164ab19a7d1a" />
+</p>
+
 ## 📋 Requisitos del Sistema
 
 - **Python:** 3.9 o superior.
