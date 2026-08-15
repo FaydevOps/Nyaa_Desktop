@@ -76,29 +76,68 @@ def copiar_al_portapapeles(texto, window):
     window.update()
 
 def detectar_transmission():
-    """Detecta si transmission-cli está disponible en el sistema."""
-    try:
-        if ES_WINDOWS:
-            # Buscar transmission-cli.exe en el PATH
-            cmd = ['where', 'transmission-cli.exe']
-        else:
-            cmd = ['which', 'transmission-cli']
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        return res.returncode == 0
-    except Exception:
+    """
+    Detecta si transmission-cli está disponible en el sistema.
+    En Windows busca en rutas comunes y usa 'where'.
+    """
+    if ES_WINDOWS:
+        # Primero intentar con 'where'
+        try:
+            result = subprocess.run(['where', 'transmission-cli'], capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+        except:
+            pass
+        # Buscar en rutas comunes de instalación
+        common_paths = [
+            r"C:\Program Files\Transmission\bin\transmission-cli.exe",
+            r"C:\Program Files (x86)\Transmission\bin\transmission-cli.exe",
+            r"C:\ProgramData\chocolatey\bin\transmission-cli.exe",
+            os.path.expanduser(r"~\scoop\shims\transmission-cli.exe")
+        ]
+        for path in common_paths:
+            if os.path.exists(path):
+                return True
         return False
+    else:
+        # Linux/Mac: usar 'which'
+        try:
+            result = subprocess.run(['which', 'transmission-cli'], capture_output=True, text=True)
+            return result.returncode == 0
+        except:
+            return False
 
 def detectar_aria2():
-    """Detecta si aria2c está disponible en el sistema."""
-    try:
-        if ES_WINDOWS:
-            cmd = ['where', 'aria2c.exe']
-        else:
-            cmd = ['which', 'aria2c']
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        return res.returncode == 0
-    except Exception:
+    """
+    Detecta si aria2c está disponible en el sistema.
+    En Windows busca en rutas comunes y usa 'where'.
+    """
+    if ES_WINDOWS:
+        # Primero intentar con 'where'
+        try:
+            result = subprocess.run(['where', 'aria2c'], capture_output=True, text=True)
+            if result.returncode == 0:
+                return True
+        except:
+            pass
+        # Buscar en rutas comunes de instalación
+        common_paths = [
+            r"C:\Program Files\aria2\aria2c.exe",
+            r"C:\Program Files (x86)\aria2\aria2c.exe",
+            r"C:\ProgramData\chocolatey\bin\aria2c.exe",
+            os.path.expanduser(r"~\scoop\shims\aria2c.exe")
+        ]
+        for path in common_paths:
+            if os.path.exists(path):
+                return True
         return False
+    else:
+        # Linux/Mac: usar 'which'
+        try:
+            result = subprocess.run(['which', 'aria2c'], capture_output=True, text=True)
+            return result.returncode == 0
+        except:
+            return False
 
 def detectar_idioma_torrent(nombre):
     """Detecta el idioma de un título de torrent retornando (idioma, emoji, color_hex)."""
