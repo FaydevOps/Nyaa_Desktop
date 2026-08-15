@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-🎌 Nyaa Desktop Client & Anime Downloader Pro v5.1
+🎌 Nyaa Desktop Client & Anime Downloader Pro v5.9
 ==================================================
 Una aplicación completa de escritorio para explorar, buscar, ver detalles,
 descargar y subir torrents a Nyaa.si con integraciones con AniList,
@@ -75,69 +75,143 @@ def copiar_al_portapapeles(texto, window):
     window.clipboard_append(texto)
     window.update()
 
+def buscar_ejecutable_universal(nombre):
+    """
+    Busca un ejecutable en cualquier sistema operativo.
+    
+    Args:
+        nombre: Nombre del ejecutable (ej: 'transmission-cli', 'aria2c')
+    
+    Returns:
+        str: Ruta completa al ejecutable o None si no se encuentra
+    """
+    # 1. Buscar en el PATH usando 'which' (Linux/Mac) o 'where' (Windows)
+    try:
+        if ES_WINDOWS:
+            cmd = ['where', nombre + '.exe']
+        else:
+            cmd = ['which', nombre]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for linea in result.stdout.strip().split('\n'):
+                if linea and os.path.exists(linea):
+                    return linea
+    except:
+        pass
+    
+    # 2. Si no está en el PATH, buscar en rutas comunes
+    if ES_WINDOWS:
+        # Obtener el nombre de usuario
+        usuario = os.environ.get('USERNAME', '')
+        userprofile = os.environ.get('USERPROFILE', 'C:\\Users\\' + usuario)
+        
+        # RUTAS EXACTAS PARA TU SISTEMA
+        rutas_exactas = [
+            # Transmission - Ruta que tienes
+            r"C:\Program Files\Transmission\transmission-cli.exe",
+            r"C:\Program Files\Transmission\bin\transmission-cli.exe",
+            r"C:\Program Files (x86)\Transmission\transmission-cli.exe",
+            r"C:\Program Files (x86)\Transmission\bin\transmission-cli.exe",
+            # aria2 - Ruta de winget (la que tienes)
+            os.path.join(userprofile, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links', 'aria2c.exe'),
+            # Otras rutas de winget
+            os.path.join(userprofile, 'AppData', 'Local', 'Programs', 'aria2', 'aria2c.exe'),
+            os.path.join(userprofile, 'AppData', 'Local', 'Programs', 'aria2', 'bin', 'aria2c.exe'),
+            # Program Files
+            r"C:\Program Files\aria2\aria2c.exe",
+            r"C:\Program Files\aria2\bin\aria2c.exe",
+            r"C:\Program Files (x86)\aria2\aria2c.exe",
+            r"C:\Program Files (x86)\aria2\bin\aria2c.exe",
+            # Transmission winget
+            os.path.join(userprofile, 'AppData', 'Local', 'Programs', 'Transmission', 'transmission-cli.exe'),
+            os.path.join(userprofile, 'AppData', 'Local', 'Programs', 'Transmission', 'bin', 'transmission-cli.exe'),
+            # Scoop
+            os.path.join(userprofile, 'scoop', 'shims', 'transmission-cli.exe'),
+            os.path.join(userprofile, 'scoop', 'shims', 'aria2c.exe'),
+            # Chocolatey
+            r"C:\ProgramData\chocolatey\bin\transmission-cli.exe",
+            r"C:\ProgramData\chocolatey\bin\aria2c.exe",
+        ]
+        
+        # Verificar rutas exactas primero
+        for ruta in rutas_exactas:
+            if os.path.exists(ruta):
+                return ruta
+        
+        # Luego buscar en carpetas comunes
+        rutas_base = [
+            os.environ.get('ProgramFiles', 'C:\\Program Files'),
+            os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'),
+            os.environ.get('LOCALAPPDATA', os.path.join(userprofile, 'AppData', 'Local')),
+            os.environ.get('APPDATA', os.path.join(userprofile, 'AppData', 'Roaming')),
+            os.path.join(userprofile, 'scoop', 'shims'),
+            'C:\\ProgramData\\chocolatey\\bin',
+            os.path.join(userprofile, 'AppData', 'Local', 'Programs'),
+            os.path.join(userprofile, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links'),
+        ]
+        
+        carpetas = {
+            'transmission-cli': ['Transmission', 'Transmission\\bin', 'transmission'],
+            'aria2c': ['aria2', 'aria2\\bin', 'aria2c'],
+        }
+        
+        for base in rutas_base:
+            if not base or not os.path.exists(base):
+                continue
+            for carpeta in carpetas.get(nombre, []):
+                ruta = os.path.join(base, carpeta, nombre + '.exe')
+                if os.path.exists(ruta):
+                    return ruta
+            ruta_directa = os.path.join(base, nombre + '.exe')
+            if os.path.exists(ruta_directa):
+                return ruta_directa
+    
+    elif ES_MAC:
+        # Rutas de macOS
+        rutas = [
+            f'/usr/local/bin/{nombre}',
+            f'/opt/homebrew/bin/{nombre}',
+            f'/usr/bin/{nombre}',
+            f'/opt/local/bin/{nombre}',
+        ]
+        for ruta in rutas:
+            if os.path.exists(ruta):
+                return ruta
+        
+        # Buscar en aplicaciones de Mac
+        if nombre == 'transmission-cli':
+            ruta = '/Applications/Transmission.app/Contents/MacOS/transmission-cli'
+            if os.path.exists(ruta):
+                return ruta
+    
+    else:
+        # Rutas de Linux
+        rutas = [
+            f'/usr/bin/{nombre}',
+            f'/usr/local/bin/{nombre}',
+            f'/bin/{nombre}',
+            f'/snap/bin/{nombre}',
+        ]
+        for ruta in rutas:
+            if os.path.exists(ruta):
+                return ruta
+    
+    return None
+
 def detectar_transmission():
     """
     Detecta si transmission-cli está disponible en el sistema.
-    En Windows busca en rutas comunes y usa 'where'.
+    Retorna la ruta al ejecutable o None si no se encuentra.
     """
-    if ES_WINDOWS:
-        # Primero intentar con 'where'
-        try:
-            result = subprocess.run(['where', 'transmission-cli'], capture_output=True, text=True)
-            if result.returncode == 0:
-                return True
-        except:
-            pass
-        # Buscar en rutas comunes de instalación
-        common_paths = [
-            r"C:\Program Files\Transmission\bin\transmission-cli.exe",
-            r"C:\Program Files (x86)\Transmission\bin\transmission-cli.exe",
-            r"C:\ProgramData\chocolatey\bin\transmission-cli.exe",
-            os.path.expanduser(r"~\scoop\shims\transmission-cli.exe")
-        ]
-        for path in common_paths:
-            if os.path.exists(path):
-                return True
-        return False
-    else:
-        # Linux/Mac: usar 'which'
-        try:
-            result = subprocess.run(['which', 'transmission-cli'], capture_output=True, text=True)
-            return result.returncode == 0
-        except:
-            return False
+    return buscar_ejecutable_universal('transmission-cli')
 
 def detectar_aria2():
     """
     Detecta si aria2c está disponible en el sistema.
-    En Windows busca en rutas comunes y usa 'where'.
+    Retorna la ruta al ejecutable o None si no se encuentra.
     """
-    if ES_WINDOWS:
-        # Primero intentar con 'where'
-        try:
-            result = subprocess.run(['where', 'aria2c'], capture_output=True, text=True)
-            if result.returncode == 0:
-                return True
-        except:
-            pass
-        # Buscar en rutas comunes de instalación
-        common_paths = [
-            r"C:\Program Files\aria2\aria2c.exe",
-            r"C:\Program Files (x86)\aria2\aria2c.exe",
-            r"C:\ProgramData\chocolatey\bin\aria2c.exe",
-            os.path.expanduser(r"~\scoop\shims\aria2c.exe")
-        ]
-        for path in common_paths:
-            if os.path.exists(path):
-                return True
-        return False
-    else:
-        # Linux/Mac: usar 'which'
-        try:
-            result = subprocess.run(['which', 'aria2c'], capture_output=True, text=True)
-            return result.returncode == 0
-        except:
-            return False
+    return buscar_ejecutable_universal('aria2c')
 
 def detectar_idioma_torrent(nombre):
     """Detecta el idioma de un título de torrent retornando (idioma, emoji, color_hex)."""
@@ -310,8 +384,44 @@ class NyaaDesktopApp:
         self.torrents_filtrados = []
         self.animes_catalogo = []
         self.descargas_activas = []
-        self.transmission_disponible = detectar_transmission()
-        self.aria2_disponible = detectar_aria2()
+        
+        # Detectar clientes BitTorrent
+        print("=" * 60)
+        print(f"🔍 SISTEMA OPERATIVO: {SISTEMA}")
+        print("=" * 60)
+        
+        print("\n🔍 Detectando Transmission...")
+        self.transmission_path = detectar_transmission()
+        if self.transmission_path:
+            print(f"   ✅ Transmission encontrado en: {self.transmission_path}")
+        else:
+            print("   ❌ Transmission NO encontrado")
+            if ES_WINDOWS:
+                print("   💡 Buscando en: C:\\Program Files\\Transmission\\transmission-cli.exe")
+                print("   💡 Instala con: winget install Transmission.Transmission")
+            elif ES_MAC:
+                print("   💡 Instala con: brew install transmission-cli")
+            else:
+                print("   💡 Instala con: sudo apt install transmission-cli")
+        
+        print("\n🔍 Detectando aria2...")
+        self.aria2_path = detectar_aria2()
+        if self.aria2_path:
+            print(f"   ✅ aria2 encontrado en: {self.aria2_path}")
+        else:
+            print("   ❌ aria2 NO encontrado")
+            if ES_WINDOWS:
+                print("   💡 Buscando en: %USERPROFILE%\\AppData\\Local\\Microsoft\\WinGet\\Links\\aria2c.exe")
+                print("   💡 Instala con: winget install aria2.aria2")
+            elif ES_MAC:
+                print("   💡 Instala con: brew install aria2")
+            else:
+                print("   💡 Instala con: sudo apt install aria2")
+        
+        print("\n" + "=" * 60)
+        
+        self.transmission_disponible = self.transmission_path is not None
+        self.aria2_disponible = self.aria2_path is not None
         
         self.crear_interfaz()
         self.comprobar_estado_usuario()
@@ -380,7 +490,7 @@ class NyaaDesktopApp:
         lbl_logo.pack(padx=20, pady=(20, 5), anchor="w")
 
         lbl_sub = ctk.CTkLabel(
-            self.sidebar, text="Desktop Client v5.1", font=("Segoe UI", 11), text_color="#6B7280"
+            self.sidebar, text="Desktop Client v5.9", font=("Segoe UI", 11), text_color="#6B7280"
         )
         lbl_sub.pack(padx=20, pady=(0, 20), anchor="w")
 
@@ -435,12 +545,20 @@ class NyaaDesktopApp:
         frame_footer = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         frame_footer.pack(side="bottom", fill="x", padx=15, pady=15)
 
-        tb_status = "✅ Transmission OK" if self.transmission_disponible else "⚠️ Transmission no encontrado"
-        tb_color = "#10B981" if self.transmission_disponible else "#F59E0B"
+        if self.transmission_path:
+            tb_status = f"✅ Transmission: {os.path.basename(self.transmission_path)}"
+            tb_color = "#10B981"
+        else:
+            tb_status = "⚠️ Transmission no encontrado"
+            tb_color = "#F59E0B"
         ctk.CTkLabel(frame_footer, text=tb_status, font=("Segoe UI", 11), text_color=tb_color).pack(anchor="w")
 
-        aria_status = "✅ aria2 OK" if self.aria2_disponible else "⚠️ aria2 no encontrado"
-        aria_color = "#10B981" if self.aria2_disponible else "#F59E0B"
+        if self.aria2_path:
+            aria_status = f"✅ aria2: {os.path.basename(self.aria2_path)}"
+            aria_color = "#10B981"
+        else:
+            aria_status = "⚠️ aria2 no encontrado"
+            aria_color = "#F59E0B"
         ctk.CTkLabel(frame_footer, text=aria_status, font=("Segoe UI", 11), text_color=aria_color).pack(anchor="w")
 
         # CONTENEDOR PRINCIPAL
@@ -1307,15 +1425,16 @@ class NyaaDesktopApp:
 
     def descargar_con_transmission(self, url, nombre):
         """
-        Descarga usando transmission-cli con la opción --exit para que espere a que termine.
-        Si url es un enlace http, descarga el archivo .torrent;
-        si es un magnet, lo pasa directamente.
+        Descarga usando transmission-cli con la ruta completa.
         """
         def _dl():
             try:
+                tmp_path = None
+                cmd = None
+                
                 if url.startswith('magnet:'):
                     # Es un magnet, usarlo directamente
-                    cmd = ['transmission-cli', '--exit', '-w', self.dir_descargas, url]
+                    cmd = [self.transmission_path, '--exit', '-w', self.dir_descargas, url]
                     self.window.after(0, lambda: self.lbl_status.configure(
                         text=f"🧲 Descargando magnet con Transmission: {nombre[:30]}..."
                     ))
@@ -1326,25 +1445,33 @@ class NyaaDesktopApp:
                     tmp_path = os.path.join(self.dir_descargas, nombre_archivo)
                     with open(tmp_path, 'wb') as f:
                         f.write(r.content)
-                    cmd = ['transmission-cli', '--exit', '-w', self.dir_descargas, tmp_path]
+                    cmd = [self.transmission_path, '--exit', '-w', self.dir_descargas, tmp_path]
                     self.window.after(0, lambda: self.lbl_status.configure(
                         text=f"⬇️ Descargando con Transmission: {nombre[:30]}..."
                     ))
 
-                # Ejecutar y esperar (timeout de 1 hora)
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+                if cmd:
+                    # Ejecutar y esperar (timeout de 1 hora)
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+                    
+                    # Limpiar archivo temporal
+                    if tmp_path and os.path.exists(tmp_path):
+                        try:
+                            os.remove(tmp_path)
+                        except:
+                            pass
 
-                if result.returncode == 0:
-                    self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
-                else:
-                    error_msg = result.stderr.strip() or "Código de error desconocido."
-                    self.window.after(0, lambda: messagebox.showerror(
-                        "Error en Transmission",
-                        f"Transmission finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
-                    ))
-                    self.window.after(0, lambda: self.lbl_status.configure(
-                        text=f"❌ Falló la descarga de {nombre[:30]}..."
-                    ))
+                    if result.returncode == 0:
+                        self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
+                    else:
+                        error_msg = result.stderr.strip() or "Código de error desconocido."
+                        self.window.after(0, lambda: messagebox.showerror(
+                            "Error en Transmission",
+                            f"Transmission finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
+                        ))
+                        self.window.after(0, lambda: self.lbl_status.configure(
+                            text=f"❌ Falló la descarga de {nombre[:30]}..."
+                        ))
 
             except subprocess.TimeoutExpired:
                 self.window.after(0, lambda: messagebox.showerror(
@@ -1360,13 +1487,15 @@ class NyaaDesktopApp:
 
     def descargar_con_aria2(self, url, nombre):
         """
-        Descarga usando aria2c. Acepta magnet o enlace a .torrent.
-        aria2c siempre espera a que termine la descarga.
+        Descarga usando aria2c con la ruta completa.
         """
         def _dl():
             try:
+                tmp_path = None
+                cmd = None
+                
                 if url.startswith('magnet:'):
-                    cmd = ['aria2c', '--seed-time=0', '--dir=' + self.dir_descargas, url]
+                    cmd = [self.aria2_path, '--seed-time=0', '--dir=' + self.dir_descargas, url]
                     self.window.after(0, lambda: self.lbl_status.configure(
                         text=f"🧲 Descargando magnet con aria2: {nombre[:30]}..."
                     ))
@@ -1376,24 +1505,32 @@ class NyaaDesktopApp:
                     tmp_path = os.path.join(self.dir_descargas, nombre_archivo)
                     with open(tmp_path, 'wb') as f:
                         f.write(r.content)
-                    cmd = ['aria2c', '--seed-time=0', '--dir=' + self.dir_descargas, tmp_path]
+                    cmd = [self.aria2_path, '--seed-time=0', '--dir=' + self.dir_descargas, tmp_path]
                     self.window.after(0, lambda: self.lbl_status.configure(
                         text=f"⬇️ Descargando con aria2: {nombre[:30]}..."
                     ))
 
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+                if cmd:
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+                    
+                    # Limpiar archivo temporal
+                    if tmp_path and os.path.exists(tmp_path):
+                        try:
+                            os.remove(tmp_path)
+                        except:
+                            pass
 
-                if result.returncode == 0:
-                    self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
-                else:
-                    error_msg = result.stderr.strip() or "Código de error desconocido."
-                    self.window.after(0, lambda: messagebox.showerror(
-                        "Error en aria2",
-                        f"aria2c finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
-                    ))
-                    self.window.after(0, lambda: self.lbl_status.configure(
-                        text=f"❌ Falló la descarga de {nombre[:30]}..."
-                    ))
+                    if result.returncode == 0:
+                        self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
+                    else:
+                        error_msg = result.stderr.strip() or "Código de error desconocido."
+                        self.window.after(0, lambda: messagebox.showerror(
+                            "Error en aria2",
+                            f"aria2c finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
+                        ))
+                        self.window.after(0, lambda: self.lbl_status.configure(
+                            text=f"❌ Falló la descarga de {nombre[:30]}..."
+                        ))
 
             except subprocess.TimeoutExpired:
                 self.window.after(0, lambda: messagebox.showerror(
