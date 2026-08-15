@@ -42,32 +42,12 @@ if exist requirements.txt (
     echo [AVISO] No se encontro requirements.txt. Omitiendo.
 )
 
-:: 5. Verificar/Instalar Chocolatey
-set CHOCO_PATH=C:\ProgramData\chocolatey\bin\choco.exe
-if exist "%CHOCO_PATH%" (
-    echo [+] Chocolatey ya esta instalado.
-    :: Agregar al PATH
-    set "PATH=%PATH%;C:\ProgramData\chocolatey\bin"
-) else (
-    echo [+] Instalando Chocolatey...
-    powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
-    if %errorlevel% neq 0 (
-        echo [ERROR] No se pudo instalar Chocolatey.
-        pause
-        exit
-    )
-    echo [+] Chocolatey instalado correctamente.
-    :: Agregar al PATH
-    set "PATH=%PATH%;C:\ProgramData\chocolatey\bin"
-    :: Refrescar variables de entorno (opcional)
-    call refreshenv >nul 2>&1
-)
-
-:: 6. Instalar Transmission y aria2 mediante Chocolatey
+:: 5. Instalar Transmission y aria2 mediante winget
 echo [+] Instalando Transmission y aria2 (si no estan instalados)...
-choco install transmission aria2 -y --limit-output
+winget install --id Transmission.Transmission -e --silent --accept-package-agreements
+winget install --id aria2.aria2 -e --silent --accept-package-agreements
 
-:: 7. Verificar que Transmission y aria2 estén disponibles (añadir rutas si es necesario)
+:: 6. Verificar que Transmission y aria2 estén disponibles
 echo [+] Verificando instalacion...
 where transmission-cli >nul 2>nul
 if %errorlevel% neq 0 (
@@ -82,14 +62,13 @@ if %errorlevel% neq 0 (
     echo [+] aria2c OK.
 )
 
-:: 8. Lanzar la aplicación en segundo plano
+:: 7. Lanzar la aplicación en segundo plano
 echo.
 echo ===================================================
 echo    Iniciando Nyaa Desktop Client...
 echo ===================================================
 echo.
 
-:: Asegurar que el PATH incluye las rutas de los clientes antes de lanzar
 start "" pythonw nyaadesk.py
 
 timeout /t 2 >nul
