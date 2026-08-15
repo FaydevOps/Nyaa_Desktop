@@ -42,10 +42,13 @@ if exist requirements.txt (
     echo [AVISO] No se encontro requirements.txt. Omitiendo.
 )
 
-:: 5. Instalar Chocolatey (si no está instalado)
-echo [+] Verificando Chocolatey...
-where choco >nul 2>nul
-if %errorlevel% neq 0 (
+:: 5. Verificar/Instalar Chocolatey
+set CHOCO_PATH=C:\ProgramData\chocolatey\bin\choco.exe
+if exist "%CHOCO_PATH%" (
+    echo [+] Chocolatey ya esta instalado.
+    :: Agregar al PATH
+    set "PATH=%PATH%;C:\ProgramData\chocolatey\bin"
+) else (
     echo [+] Instalando Chocolatey...
     powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
     if %errorlevel% neq 0 (
@@ -54,27 +57,27 @@ if %errorlevel% neq 0 (
         exit
     )
     echo [+] Chocolatey instalado correctamente.
-    :: Refresh environment
-    call refreshenv
-) else (
-    echo [+] Chocolatey ya esta instalado.
+    :: Agregar al PATH
+    set "PATH=%PATH%;C:\ProgramData\chocolatey\bin"
+    :: Refrescar variables de entorno (opcional)
+    call refreshenv >nul 2>&1
 )
 
 :: 6. Instalar Transmission y aria2 mediante Chocolatey
 echo [+] Instalando Transmission y aria2 (si no estan instalados)...
 choco install transmission aria2 -y --limit-output
 
-:: 7. Verificar que Transmission y aria2 estén en el PATH (opcional, pero el programa lo detecta automáticamente)
+:: 7. Verificar que Transmission y aria2 estén disponibles (añadir rutas si es necesario)
 echo [+] Verificando instalacion...
 where transmission-cli >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [AVISO] transmission-cli no encontrado en el PATH. Puede que necesites reiniciar la consola.
+    echo [AVISO] transmission-cli no encontrado. Asegurate de que Transmission este instalado.
 ) else (
     echo [+] transmission-cli OK.
 )
 where aria2c >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [AVISO] aria2c no encontrado en el PATH. Puede que necesites reiniciar la consola.
+    echo [AVISO] aria2c no encontrado. Asegurate de que aria2 este instalado.
 ) else (
     echo [+] aria2c OK.
 )
@@ -86,6 +89,7 @@ echo    Iniciando Nyaa Desktop Client...
 echo ===================================================
 echo.
 
+:: Asegurar que el PATH incluye las rutas de los clientes antes de lanzar
 start "" pythonw nyaadesk.py
 
 timeout /t 2 >nul
