@@ -15,19 +15,14 @@ import platform
 import threading
 import time
 import urllib.parse
-import hashlib
-import io
 import json
 import subprocess
 import re
-from datetime import datetime
 
 # Librerías de terceros (deben estar instaladas previamente)
 import requests
 from bs4 import BeautifulSoup
-from PIL import Image, ImageTk
 import customtkinter as ctk
-import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 SISTEMA = platform.system()
@@ -40,12 +35,13 @@ HEADERS = {
 }
 
 def obtener_carpeta_descargas():
-    if ES_WINDOWS:
-        return os.path.join(os.environ.get('USERPROFILE', ''), 'Descargas', 'Anime')
-    elif ES_MAC:
-        return os.path.join(os.path.expanduser('~'), 'Downloads', 'Anime')
-    else:
-        return os.path.join(os.path.expanduser('~'), 'Descargas', 'Anime')
+    # Windows/macOS siempre usan "Downloads" en disco (el nombre "Descargas" es solo visual);
+    # en Linux depende del idioma del sistema.
+    home = os.path.expanduser('~')
+    for nombre in ('Downloads', 'Descargas'):
+        if os.path.isdir(os.path.join(home, nombre)):
+            return os.path.join(home, nombre, 'Anime')
+    return os.path.join(home, 'Downloads', 'Anime')
 
 def obtener_carpeta_config():
     if ES_WINDOWS:
@@ -68,12 +64,6 @@ def abrir_recurso(target):
     except Exception as e:
         print(f"Error abriendo recurso: {e}")
         return False
-
-def copiar_al_portapapeles(texto, window):
-    """Copia una cadena de texto al portapapeles."""
-    window.clipboard_clear()
-    window.clipboard_append(texto)
-    window.update()
 
 def buscar_ejecutable_universal(nombre):
     """
@@ -134,9 +124,9 @@ def buscar_ejecutable_universal(nombre):
             r"C:\ProgramData\chocolatey\bin\aria2c.exe",
         ]
         
-        # Verificar rutas exactas primero
+        # Verificar rutas exactas primero (solo las del ejecutable pedido)
         for ruta in rutas_exactas:
-            if os.path.exists(ruta):
+            if os.path.basename(ruta).lower() == nombre.lower() + '.exe' and os.path.exists(ruta):
                 return ruta
         
         # Luego buscar en carpetas comunes
@@ -232,7 +222,7 @@ def detectar_idioma_torrent(nombre):
             'color': '#F59E0B'
         },
         'Inglés': {
-            'keywords': ['english', 'sub english', 'audio english', 'eng', 'en-', 'dual audio'],
+            'keywords': ['english', 'sub english', 'audio english', 'eng', 'en-'],
             'emoji': '🇬🇧',
             'color': '#3B82F6'
         },
@@ -270,22 +260,29 @@ def detectar_idioma_torrent(nombre):
     
     for idioma, info in dict_idiomas.items():
         for kw in info['keywords']:
-            if kw in nombre_lower:
+            if _contiene_palabra(nombre_lower, kw):
                 return (idioma, info['emoji'], info['color'])
-                
+
     return ('General / Multi', '🌐', '#6B7280')
 
+def _contiene_palabra(texto, kw):
+    """True si kw aparece como palabra suelta ('lat' en '[Lat]' sí, en 'latest' no)."""
+    patron = r'(?<![a-z0-9])' + re.escape(kw)
+    if kw[-1].isalnum():
+        patron += r'(?![a-z0-9])'
+    return re.search(patron, texto) is not None
+
 def detectar_calidad(nombre):
-    nombre_l = nombre.lower()
-    if '2160p' in nombre_l or '4k' in nombre_l:
+    nombre_l = (nombre or '').lower()
+    if _contiene_palabra(nombre_l, '2160p') or _contiene_palabra(nombre_l, '4k'):
         return '4K UHD'
-    elif '1080p' in nombre_l or 'fhd' in nombre_l:
+    elif _contiene_palabra(nombre_l, '1080p') or _contiene_palabra(nombre_l, 'fhd'):
         return '1080p'
-    elif '720p' in nombre_l or 'hd' in nombre_l:
+    elif _contiene_palabra(nombre_l, '720p') or _contiene_palabra(nombre_l, 'hd'):
         return '720p'
-    elif '480p' in nombre_l or 'sd' in nombre_l:
+    elif _contiene_palabra(nombre_l, '480p') or _contiene_palabra(nombre_l, 'sd'):
         return '480p'
-    elif 'flac' in nombre_l or 'lossless' in nombre_l:
+    elif _contiene_palabra(nombre_l, 'flac') or _contiene_palabra(nombre_l, 'lossless'):
         return 'Audio Hi-Res'
     return 'Estándar'
 
@@ -366,11 +363,10 @@ class NyaaDesktopApp:
         # Rutas del sistema y configuración
         self.dir_descargas = obtener_carpeta_descargas()
         self.dir_config = obtener_carpeta_config()
-        self.dir_cache = os.path.join(self.dir_config, 'cache_img')
         self.file_favs = os.path.join(self.dir_config, 'favoritos.json')
         self.file_cookies = os.path.join(self.dir_config, 'session_cookies.json')
-        
-        for d in [self.dir_descargas, self.dir_config, self.dir_cache]:
+
+        for d in [self.dir_descargas, self.dir_config]:
             os.makedirs(d, exist_ok=True)
             
         # Variables de estado
@@ -382,8 +378,6 @@ class NyaaDesktopApp:
         self.favoritos = self.cargar_favoritos()
         self.torrents_lista = []
         self.torrents_filtrados = []
-        self.animes_catalogo = []
-        self.descargas_activas = []
         
         # Detectar clientes BitTorrent
         print("=" * 60)
@@ -791,13 +785,14 @@ class NyaaDesktopApp:
         txt_desc = ctk.CTkTextbox(modal, font=("Segoe UI", 12), wrap="word")
         txt_desc.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         txt_desc.insert("1.0", "⏳ Cargando descripción original desde Nyaa.si...")
+        estado = {'original': None}  # se traduce siempre desde el original, no desde la última traducción
 
         def _do_translate():
             target_lang_name = combo_idioma.get()
             target_code = IDIOMAS_TRADUCCION.get(target_lang_name, 'es')
-            
-            original_text = txt_desc.get("1.0", "end-1c")
-            if not original_text or "Cargando" in original_text:
+
+            original_text = estado['original']
+            if not original_text:
                 return
 
             self.lbl_status.configure(text=f"🌐 Traduciendo descripción a {target_lang_name}...")
@@ -851,12 +846,13 @@ class NyaaDesktopApp:
                 desc_div = soup.find('div', id='torrent-description')
                 
                 desc_text = desc_div.text.strip() if desc_div else "Sin descripción provista por el uploader."
-                
+                estado['original'] = desc_text
+
                 modal.after(0, lambda: txt_desc.delete("1.0", "end"))
                 modal.after(0, lambda: txt_desc.insert("1.0", desc_text))
             except Exception as e:
                 modal.after(0, lambda: txt_desc.delete("1.0", "end"))
-                modal.after(0, lambda: txt_desc.insert("1.0", f"Error al descargar descripción: {e}"))
+                modal.after(0, lambda e=e: txt_desc.insert("1.0", f"Error al descargar descripción: {e}"))
 
         threading.Thread(target=_fetch_desc, daemon=True).start()
 
@@ -956,7 +952,7 @@ class NyaaDesktopApp:
                     text=f"✅ Cargados {len(torrents)} torrents desde Nyaa.si"
                 ))
             except Exception as e:
-                self.window.after(0, lambda: self.lbl_status.configure(text=f"❌ Error al cargar Nyaa: {e}"))
+                self.window.after(0, lambda e=e: self.lbl_status.configure(text=f"❌ Error al cargar Nyaa: {e}"))
 
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1024,7 +1020,7 @@ class NyaaDesktopApp:
                 data = res.json().get('data', {}).get('Page', {}).get('media', [])
                 self.window.after(0, lambda: self.renderizar_cartas_anilist(data))
             except Exception as e:
-                self.window.after(0, lambda: self.lbl_status.configure(text=f"❌ Error AniList: {e}"))
+                self.window.after(0, lambda e=e: self.lbl_status.configure(text=f"❌ Error AniList: {e}"))
 
         threading.Thread(target=_search, daemon=True).start()
 
@@ -1037,16 +1033,18 @@ class NyaaDesktopApp:
             card = ctk.CTkFrame(self.scroll_anilist, fg_color="#1F2330", corner_radius=10)
             card.pack(fill="x", padx=5, pady=6)
 
-            title = a.get('title', {}).get('english') or a.get('title', {}).get('romaji') or "Sin Título"
-            score = a.get('averageScore', 0)
-            eps = a.get('episodes', '?')
-            desc_raw = re.sub(r'<[^>]+>', '', a.get('description', 'Sin sinopsis disponibles.'))
+            titulos = a.get('title') or {}
+            title = titulos.get('english') or titulos.get('romaji') or "Sin Título"
+            # AniList devuelve null (no ausencia) en estos campos, por eso "or" y no el default de get()
+            score = a.get('averageScore') or '?'
+            eps = a.get('episodes') or '?'
+            desc_raw = re.sub(r'<[^>]+>', '', a.get('description') or 'Sin sinopsis disponible.')
 
             lbl_title = ctk.CTkLabel(card, text=f"🎬 {title}", font=("Segoe UI", 15, "bold"), text_color="#3B82F6")
             lbl_title.pack(anchor="w", padx=12, pady=(10, 2))
 
             lbl_meta = ctk.CTkLabel(
-                card, text=f"⭐ Puntuación: {score}/100 | 📺 Episodios: {eps} | 🏷️ {', '.join(a.get('genres', [])[:3])}",
+                card, text=f"⭐ Puntuación: {score}/100 | 📺 Episodios: {eps} | 🏷️ {', '.join((a.get('genres') or [])[:3])}",
                 font=("Segoe UI", 11), text_color="#9CA3AF"
             )
             lbl_meta.pack(anchor="w", padx=12, pady=(0, 4))
@@ -1063,12 +1061,13 @@ class NyaaDesktopApp:
             )
             btn_find.pack(side="left")
 
-            def _translate_synopsis(label_widget=lbl_desc, full_text=desc_raw):
+            def _translate_synopsis(label_widget=lbl_desc, full_text=desc_raw, titulo=title):
+                self.lbl_status.configure(text=f"🌐 Traduciendo sinopsis de '{titulo[:20]}...'")
                 def _th():
-                    self.lbl_status.configure(text=f"🌐 Traduciendo sinopsis de '{title[:20]}...'")
                     tr = traducir_texto(full_text, 'es')
-                    label_widget.configure(text=tr)
-                    self.lbl_status.configure(text="✅ Sinopsis traducida al español.")
+                    # Tk no es thread-safe: la UI se actualiza desde el hilo principal
+                    self.window.after(0, lambda: label_widget.configure(text=tr))
+                    self.window.after(0, lambda: self.lbl_status.configure(text="✅ Sinopsis traducida al español."))
                 threading.Thread(target=_th, daemon=True).start()
 
             btn_tr = ctk.CTkButton(
@@ -1206,18 +1205,19 @@ class NyaaDesktopApp:
                 # 2. Formatear datos multipart/form-data
                 data = {
                     'csrf_token': csrf_token,
-                    'torrent_name': title,
+                    # Nombres de campo del UploadForm de Nyaa (nyaadevs/nyaa, nyaa/forms.py)
+                    'display_name': title,
                     'category': cat,
                     'information': self.entry_upload_url.get().strip(),
                     'description': self.txt_upload_desc.get("1.0", "end-1c"),
                 }
 
                 if self.var_anon.get():
-                    data['anonymous'] = 'on'
+                    data['is_anonymous'] = 'y'
                 if self.var_remake.get():
-                    data['remake'] = 'on'
+                    data['is_remake'] = 'y'
                 if self.var_hidden.get():
-                    data['hidden'] = 'on'
+                    data['is_hidden'] = 'y'
 
                 with open(torrent_path, 'rb') as f:
                     files = {'torrent_file': (os.path.basename(torrent_path), f, 'application/x-bittorrent')}
@@ -1236,8 +1236,8 @@ class NyaaDesktopApp:
                     raise Exception(f"Nyaa rechazó la subida: {err_txt}")
 
             except Exception as e:
-                self.window.after(0, lambda: messagebox.showerror("❌ Error al Subir", str(e)))
-                self.window.after(0, lambda: self.lbl_status.configure(text=f"❌ Falló la subida: {e}"))
+                self.window.after(0, lambda e=e: messagebox.showerror("❌ Error al Subir", str(e)))
+                self.window.after(0, lambda e=e: self.lbl_status.configure(text=f"❌ Falló la subida: {e}"))
 
         threading.Thread(target=_upload, daemon=True).start()
 
@@ -1264,35 +1264,50 @@ class NyaaDesktopApp:
 
         def _do_login():
             user = entry_user.get().strip()
-            password = entry_pass.get().strip()
+            password = entry_pass.get()  # sin strip: la contraseña puede tener espacios
 
             if not user or not password:
                 messagebox.showwarning("Incompleto", "Ingresa usuario y contraseña.")
                 return
 
-            try:
-                res_get = self.session.get("https://nyaa.si/login", timeout=10)
-                soup = BeautifulSoup(res_get.text, 'html.parser')
-                csrf = soup.find('input', {'name': 'csrf_token'})
-                csrf_token = csrf.get('value') if csrf else ""
+            btn.configure(state="disabled", text="⏳ Conectando...")
 
-                post_data = {
-                    'csrf_token': csrf_token,
-                    'username': user,
-                    'password': password
-                }
+            def _ok():
+                self.guardar_cookies_sesion()
+                self.comprobar_estado_usuario()
+                dialog.destroy()
+                messagebox.showinfo("✅ Sesión Iniciada", "¡Bienvenido de nuevo!")
 
-                res_post = self.session.post("https://nyaa.si/login", data=post_data, timeout=12)
+            def _fallo(titulo, msg):
+                btn.configure(state="normal", text="Entrar")
+                messagebox.showerror(titulo, msg)
 
-                if "Invalid username or password" in res_post.text:
-                    messagebox.showerror("Error Login", "Usuario o contraseña incorrectos en Nyaa.si.")
-                else:
-                    self.guardar_cookies_sesion()
-                    self.comprobar_estado_usuario()
-                    dialog.destroy()
-                    messagebox.showinfo("✅ Sesión Iniciada", f"¡Bienvenido de nuevo!")
-            except Exception as e:
-                messagebox.showerror("Error de Red", f"No se pudo iniciar sesión: {e}")
+            def _th():
+                try:
+                    res_get = self.session.get("https://nyaa.si/login", timeout=10)
+                    soup = BeautifulSoup(res_get.text, 'html.parser')
+                    csrf = soup.find('input', {'name': 'csrf_token'})
+                    csrf_token = csrf.get('value') if csrf else ""
+
+                    post_data = {
+                        'csrf_token': csrf_token,
+                        'username': user,
+                        'password': password
+                    }
+
+                    res_post = self.session.post("https://nyaa.si/login", data=post_data, timeout=12)
+
+                    # Nyaa redirige fuera de /login cuando el login es correcto
+                    if res_post.url.rstrip('/').endswith('/login'):
+                        alerta = BeautifulSoup(res_post.text, 'html.parser').find('div', class_='alert-danger')
+                        msg = alerta.text.strip() if alerta else "Usuario o contraseña incorrectos en Nyaa.si."
+                        dialog.after(0, lambda: _fallo("Error Login", msg))
+                    else:
+                        dialog.after(0, _ok)
+                except Exception as e:
+                    dialog.after(0, lambda e=e: _fallo("Error de Red", f"No se pudo iniciar sesión: {e}"))
+
+            threading.Thread(target=_th, daemon=True).start()
 
         btn = ctk.CTkButton(dialog, text="Entrar", font=("Segoe UI", 13, "bold"), command=_do_login, width=280, height=36)
         btn.pack(pady=20)
@@ -1350,6 +1365,9 @@ class NyaaDesktopApp:
             if fav.get('magnet'):
                 btn_mag = ctk.CTkButton(f, text="🧲 Magnet", width=80, height=28, command=lambda m=fav['magnet']: abrir_recurso(m))
                 btn_mag.pack(side="right", padx=5)
+
+            btn_det = ctk.CTkButton(f, text="📖 Detalles", width=90, height=28, command=lambda t=fav: self.abrir_detalle_torrent(t))
+            btn_det.pack(side="right", padx=5)
 
     def borrar_favorito(self, idx):
         if idx < len(self.favoritos):
@@ -1423,56 +1441,39 @@ class NyaaDesktopApp:
             # No debería llegar aquí, pero por si acaso
             abrir_recurso(url)
 
-    def descargar_con_transmission(self, url, nombre):
-        """
-        Descarga usando transmission-cli con la ruta completa.
-        """
+    def _preparar_fuente(self, url):
+        """Devuelve (fuente, tmp_path): el magnet tal cual, o un .torrent temporal descargado."""
+        if url.startswith('magnet:'):
+            return url, None
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        r.raise_for_status()  # evita guardar una página de error HTML como .torrent
+        tmp_path = os.path.join(self.dir_descargas, f"temp_{int(time.time())}.torrent")
+        with open(tmp_path, 'wb') as f:
+            f.write(r.content)
+        return tmp_path, tmp_path
+
+    def _ejecutar_descarga(self, cliente, url, nombre, construir_cmd, ejecutar):
+        """Hilo común para Transmission/aria2: prepara la fuente, ejecuta y notifica."""
         def _dl():
+            tmp_path = None
             try:
-                tmp_path = None
-                cmd = None
-                
-                if url.startswith('magnet:'):
-                    # Es un magnet, usarlo directamente
-                    cmd = [self.transmission_path, '--exit', '-w', self.dir_descargas, url]
-                    self.window.after(0, lambda: self.lbl_status.configure(
-                        text=f"🧲 Descargando magnet con Transmission: {nombre[:30]}..."
-                    ))
+                fuente, tmp_path = self._preparar_fuente(url)
+                icono = "🧲" if url.startswith('magnet:') else "⬇️"
+                self.window.after(0, lambda: self.lbl_status.configure(
+                    text=f"{icono} Descargando con {cliente}: {nombre[:30]}..."
+                ))
+                codigo, salida = ejecutar(construir_cmd(fuente))
+                if codigo == 0:
+                    self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
                 else:
-                    # Es un enlace a .torrent, descargar el archivo primero
-                    r = requests.get(url, headers=HEADERS, timeout=15)
-                    nombre_archivo = f"temp_{int(time.time())}.torrent"
-                    tmp_path = os.path.join(self.dir_descargas, nombre_archivo)
-                    with open(tmp_path, 'wb') as f:
-                        f.write(r.content)
-                    cmd = [self.transmission_path, '--exit', '-w', self.dir_descargas, tmp_path]
-                    self.window.after(0, lambda: self.lbl_status.configure(
-                        text=f"⬇️ Descargando con Transmission: {nombre[:30]}..."
+                    detalle = salida.strip()[-800:] or "Código de error desconocido."
+                    self.window.after(0, lambda: messagebox.showerror(
+                        f"Error en {cliente}",
+                        f"{cliente} finalizó con código {codigo}.\n\nDetalles:\n{detalle}"
                     ))
-
-                if cmd:
-                    # Ejecutar y esperar (timeout de 1 hora)
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-                    
-                    # Limpiar archivo temporal
-                    if tmp_path and os.path.exists(tmp_path):
-                        try:
-                            os.remove(tmp_path)
-                        except:
-                            pass
-
-                    if result.returncode == 0:
-                        self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
-                    else:
-                        error_msg = result.stderr.strip() or "Código de error desconocido."
-                        self.window.after(0, lambda: messagebox.showerror(
-                            "Error en Transmission",
-                            f"Transmission finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
-                        ))
-                        self.window.after(0, lambda: self.lbl_status.configure(
-                            text=f"❌ Falló la descarga de {nombre[:30]}..."
-                        ))
-
+                    self.window.after(0, lambda: self.lbl_status.configure(
+                        text=f"❌ Falló la descarga de {nombre[:30]}..."
+                    ))
             except subprocess.TimeoutExpired:
                 self.window.after(0, lambda: messagebox.showerror(
                     "Timeout",
@@ -1480,69 +1481,59 @@ class NyaaDesktopApp:
                 ))
                 self.window.after(0, lambda: self.lbl_status.configure(text="⏰ Tiempo de descarga agotado"))
             except Exception as e:
-                self.window.after(0, lambda: messagebox.showerror("Error Transmission", str(e)))
+                self.window.after(0, lambda e=e: messagebox.showerror(f"Error {cliente}", str(e)))
                 self.window.after(0, lambda: self.lbl_status.configure(text="❌ Error en la descarga"))
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
 
         threading.Thread(target=_dl, daemon=True).start()
+
+    def descargar_con_transmission(self, url, nombre):
+        """Descarga usando transmission-cli (no tiene opción para salir al terminar)."""
+        def _ejecutar(cmd, limite=3600):
+            # transmission-cli se queda compartiendo para siempre: se corta al ver "Seeding" (100%)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            salida = b''
+            inicio = time.time()
+            try:
+                while True:
+                    trozo = proc.stdout.read1(1024)
+                    if not trozo and proc.poll() is not None:
+                        return proc.returncode, salida.decode('utf-8', 'replace')
+                    salida = (salida + trozo)[-4096:]
+                    if b'Seeding' in salida:
+                        return 0, ''
+                    if time.time() - inicio > limite:
+                        raise subprocess.TimeoutExpired(cmd, limite)
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+
+        self._ejecutar_descarga(
+            "Transmission", url, nombre,
+            lambda fuente: [self.transmission_path, '-w', self.dir_descargas, fuente],
+            _ejecutar
+        )
 
     def descargar_con_aria2(self, url, nombre):
-        """
-        Descarga usando aria2c con la ruta completa.
-        """
-        def _dl():
-            try:
-                tmp_path = None
-                cmd = None
-                
-                if url.startswith('magnet:'):
-                    cmd = [self.aria2_path, '--seed-time=0', '--dir=' + self.dir_descargas, url]
-                    self.window.after(0, lambda: self.lbl_status.configure(
-                        text=f"🧲 Descargando magnet con aria2: {nombre[:30]}..."
-                    ))
-                else:
-                    r = requests.get(url, headers=HEADERS, timeout=15)
-                    nombre_archivo = f"temp_{int(time.time())}.torrent"
-                    tmp_path = os.path.join(self.dir_descargas, nombre_archivo)
-                    with open(tmp_path, 'wb') as f:
-                        f.write(r.content)
-                    cmd = [self.aria2_path, '--seed-time=0', '--dir=' + self.dir_descargas, tmp_path]
-                    self.window.after(0, lambda: self.lbl_status.configure(
-                        text=f"⬇️ Descargando con aria2: {nombre[:30]}..."
-                    ))
+        """Descarga usando aria2c (con --seed-time=0 termina al completar)."""
+        def _ejecutar(cmd):
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            return result.returncode, result.stderr or result.stdout
 
-                if cmd:
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-                    
-                    # Limpiar archivo temporal
-                    if tmp_path and os.path.exists(tmp_path):
-                        try:
-                            os.remove(tmp_path)
-                        except:
-                            pass
-
-                    if result.returncode == 0:
-                        self.window.after(0, lambda: self.mostrar_notificacion_descarga_completa(nombre))
-                    else:
-                        error_msg = result.stderr.strip() or "Código de error desconocido."
-                        self.window.after(0, lambda: messagebox.showerror(
-                            "Error en aria2",
-                            f"aria2c finalizó con código {result.returncode}.\n\nDetalles:\n{error_msg}"
-                        ))
-                        self.window.after(0, lambda: self.lbl_status.configure(
-                            text=f"❌ Falló la descarga de {nombre[:30]}..."
-                        ))
-
-            except subprocess.TimeoutExpired:
-                self.window.after(0, lambda: messagebox.showerror(
-                    "Timeout",
-                    "La descarga ha excedido el tiempo límite (1 hora). Puede que no haya seeds suficientes."
-                ))
-                self.window.after(0, lambda: self.lbl_status.configure(text="⏰ Tiempo de descarga agotado"))
-            except Exception as e:
-                self.window.after(0, lambda: messagebox.showerror("Error aria2", str(e)))
-                self.window.after(0, lambda: self.lbl_status.configure(text="❌ Error en la descarga"))
-
-        threading.Thread(target=_dl, daemon=True).start()
+        self._ejecutar_descarga(
+            "aria2", url, nombre,
+            lambda fuente: [self.aria2_path, '--seed-time=0', '--dir=' + self.dir_descargas, fuente],
+            _ejecutar
+        )
 
     def mostrar_notificacion_descarga_completa(self, nombre):
         """

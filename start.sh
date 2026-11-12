@@ -1,5 +1,5 @@
 #!/bin/bash
-# start_nyaa.sh – Lanzador para Nyaa Desktop Client
+# start.sh – Lanzador para Nyaa Desktop Client
 # Compatible con: Debian/Ubuntu, Arch, Fedora, RHEL/CentOS, openSUSE, Alpine, macOS (Homebrew)
 
 set -e
@@ -53,7 +53,7 @@ install_packages() {
             sudo apt update && sudo apt install -y "${packages[@]}"
             ;;
         pacman)
-            sudo pacman -Syu --noconfirm "${packages[@]}"
+            sudo pacman -S --needed --noconfirm "${packages[@]}"
             ;;
         dnf)
             sudo dnf install -y "${packages[@]}"
@@ -78,6 +78,7 @@ install_packages() {
 }
 
 main() {
+    cd "$(dirname "$0")"
     echo -e "${YELLOW}🚀 Iniciando instalación de Nyaa Desktop Client...${NC}"
 
     detect_os
@@ -85,22 +86,25 @@ main() {
 
     local deps=()
     if [[ "$OS" == "macos" ]]; then
-        deps=("python3")  # Homebrew instalará pip y venv junto con python3
+        deps=("python3" "python-tk")  # Homebrew instala pip y venv junto con python3
     else
-        deps=("python3" "python3-pip" "python3-venv")
-        if [[ "$PKG_MANAGER" == "pacman" ]]; then
-            deps=("python" "python-pip")   # Arch
-        fi
-        if [[ "$PKG_MANAGER" == "apk" ]]; then
-            deps=("python3" "py3-pip" "py3-virtualenv")
-        fi
-        if [[ "$PKG_MANAGER" == "yum" ]]; then
-            deps=("python3" "python3-pip" "python3-virtualenv")
-        fi
+        # tkinter es obligatorio para customtkinter y no viene con python3 en la mayoría de distros
+        case $PKG_MANAGER in
+            pacman) deps=("python" "python-pip" "tk") ;;
+            apk)    deps=("python3" "py3-pip" "py3-virtualenv" "py3-tkinter") ;;
+            dnf|yum) deps=("python3" "python3-pip" "python3-tkinter") ;;
+            zypper) deps=("python3" "python3-pip" "python3-tk") ;;
+            *)      deps=("python3" "python3-pip" "python3-venv" "python3-tk") ;;
+        esac
     fi
 
-    echo -e "${YELLOW}📥 Instalando dependencias del sistema: ${deps[*]}${NC}"
-    install_packages "${deps[@]}"
+    # Solo pedir sudo/instalar si falta Python, venv o tkinter
+    if command -v python3 &>/dev/null && python3 -c "import tkinter, venv" &>/dev/null; then
+        echo -e "${GREEN}✅ Python 3 con tkinter ya instalado.${NC}"
+    else
+        echo -e "${YELLOW}📥 Instalando dependencias del sistema: ${deps[*]}${NC}"
+        install_packages "${deps[@]}"
+    fi
 
     if [ ! -d "env_nyaa" ]; then
         echo -e "${YELLOW}🔧 Creando entorno virtual...${NC}"
@@ -111,15 +115,12 @@ main() {
 
     source env_nyaa/bin/activate
 
-    echo -e "${YELLOW}📦 Actualizando pip...${NC}"
-    python3 -m pip install --upgrade pip
-
-    echo -e "${YELLOW}📦 Instalando dependencias Python...${NC}"
-    pip install requests beautifulsoup4 pillow customtkinter
-
-    if [ -f "requirements.txt" ]; then
-        echo -e "${YELLOW}📦 Instalando desde requirements.txt...${NC}"
-        pip install -r requirements.txt
+    if ! python3 -c "import customtkinter, requests, bs4, PIL" &>/dev/null; then
+        echo -e "${YELLOW}📦 Instalando dependencias Python desde requirements.txt...${NC}"
+        python3 -m pip install --upgrade pip
+        python3 -m pip install -r requirements.txt
+    else
+        echo -e "${GREEN}✅ Dependencias Python ya instaladas.${NC}"
     fi
 
     if [ -f "nyaadesk.py" ]; then
