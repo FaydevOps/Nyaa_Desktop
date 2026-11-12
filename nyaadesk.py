@@ -391,8 +391,7 @@ class NyaaDesktopApp:
         else:
             print("   ❌ Transmission NO encontrado")
             if ES_WINDOWS:
-                print("   💡 Buscando en: C:\\Program Files\\Transmission\\transmission-cli.exe")
-                print("   💡 Instala con: winget install Transmission.Transmission")
+                print("   💡 Transmission para Windows no incluye transmission-cli; usa aria2 (winget install aria2.aria2)")
             elif ES_MAC:
                 print("   💡 Instala con: brew install transmission-cli")
             else:
@@ -542,6 +541,9 @@ class NyaaDesktopApp:
         if self.transmission_path:
             tb_status = f"✅ Transmission: {os.path.basename(self.transmission_path)}"
             tb_color = "#10B981"
+        elif self.aria2_path:
+            tb_status = "ℹ️ Transmission: no necesario (se usa aria2)"
+            tb_color = "#6B7280"
         else:
             tb_status = "⚠️ Transmission no encontrado"
             tb_color = "#F59E0B"

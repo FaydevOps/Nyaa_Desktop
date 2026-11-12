@@ -28,13 +28,8 @@ if %errorlevel% neq 0 (
     )
 )
 
-:: 3. Buscar Transmission y aria2 (PATH y rutas tipicas); instalar con winget solo si no existen
-call :buscar transmission-cli.exe TRANSMISSION_PATH "%ProgramFiles%\Transmission\transmission-cli.exe" "%ProgramFiles%\Transmission\bin\transmission-cli.exe" "%LocalAppData%\Programs\Transmission\transmission-cli.exe" "%USERPROFILE%\scoop\shims\transmission-cli.exe"
-if not defined TRANSMISSION_PATH (
-    echo [+] Instalando Transmission con winget...
-    winget install --id Transmission.Transmission -e --silent --accept-package-agreements --accept-source-agreements
-)
-
+:: 3. Buscar aria2 (PATH y rutas tipicas); instalar con winget solo si no existe.
+::    Transmission no se instala: su paquete de Windows solo trae la GUI, sin transmission-cli.
 call :buscar aria2c.exe ARIA2_PATH "%LocalAppData%\Microsoft\WinGet\Links\aria2c.exe" "%ProgramFiles%\aria2\aria2c.exe" "%LocalAppData%\Programs\aria2\aria2c.exe" "%USERPROFILE%\scoop\shims\aria2c.exe"
 if not defined ARIA2_PATH (
     echo [+] Instalando aria2 con winget...

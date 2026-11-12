@@ -5,3 +5,5 @@
 /markdown.xml
 # Editor-based HTTP Client requests
 /httpRequests/
+#not idea folder#
+/.idea/

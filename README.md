@@ -82,7 +82,7 @@ Las descargas se guardan en `~/Downloads/Anime` (o `~/Descargas/Anime` si tu sis
 
 ### ⚡ Inicio rápido (lanzadores)
 
-- **Windows:** doble clic en `start.bat`. Instala las dependencias de Python que falten y, si no los encuentra, `aria2` y Transmission con `winget`.
+- **Windows:** doble clic en `start.bat`. Instala las dependencias de Python que falten y, si no lo encuentra, `aria2` con `winget` (Transmission para Windows no incluye `transmission-cli`, así que en Windows se usa aria2).
 - **Linux / macOS:** `bash start.sh`. Instala Python y tkinter si faltan, crea un entorno virtual `env_nyaa` y lanza la app.
 
 ### 🐧 Linux

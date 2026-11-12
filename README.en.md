@@ -84,7 +84,7 @@ Downloads are saved to `~/Downloads/Anime` (or `~/Descargas/Anime` if your syste
 
 ### ⚡ Quick start (launchers)
 
-- **Windows:** double-click `start.bat`. It installs any missing Python dependencies and, if not found, `aria2` and Transmission through `winget`.
+- **Windows:** double-click `start.bat`. It installs any missing Python dependencies and, if not found, `aria2` through `winget` (Transmission for Windows does not ship `transmission-cli`, so aria2 is used on Windows).
 - **Linux / macOS:** `bash start.sh`. It installs Python and tkinter if missing, creates an `env_nyaa` virtual environment and launches the app.
 
 ### 🐧 Linux
